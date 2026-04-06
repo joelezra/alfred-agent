@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build output
+dist/
+
+# Local data & auth
+store/
+data/
+logs/
+
+# Secrets
+*.keys.json
+.env
+.claude/settings.local.json
+
+# Temp files
+.tmp-*
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Skills system (local per-installation state)
+.nanoclaw/
+
+agents-sdk-docs
+
+# Python
+__pycache__/
+*.pyc
+*.db
+
+# Personal data in groups
+groups/*/conversations/
+groups/*/sessions/
+groups/*/logs/
+groups/*/memory.md
+groups/*/memory/
+groups/*/attachments/
+groups/*/ict/
+groups/*/scrapestack/
+groups/telegram_main/bryanlowwww_video.mp4
+
+# TLDR stats
+.tldr/
+
+# Husky hooks (local only)
+.husky/

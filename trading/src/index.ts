@@ -35,6 +35,11 @@ export {
   generateBars,
   validateBars,
   regime,
+  hourOfDay,
+  FLAT_SESSION,
+  FX_SESSIONS,
+  VOL_ONLY_SESSIONS,
+  type SessionProfile,
   type ScenarioSpec,
   type RegimeSpec,
 } from './scenarios/generator.js';
@@ -62,5 +67,18 @@ export { STRATEGIES, strategyByName } from './strategies/registry.js';
 export { naiveScalper } from './strategies/naive-scalper.js';
 export { smaTrend } from './strategies/sma-trend.js';
 export { adaptiveTrend } from './strategies/adaptive-trend.js';
+export {
+  bbRsiReversion,
+  SESSION_MODES,
+} from './strategies/bb-rsi-reversion.js';
 export { oracle, cheater } from './strategies/oracle.js';
-export { sma, atr, sizeFor } from './strategies/indicators.js';
+export {
+  sma,
+  atr,
+  sizeFor,
+  rsi,
+  bollinger,
+  bandwidthPercentile,
+  adx,
+  lastSwing,
+} from './strategies/indicators.js';

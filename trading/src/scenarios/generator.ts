@@ -29,6 +29,151 @@ export interface RegimeSpec {
   liquidity: number;
 }
 
+/**
+ * Intraday structure: what the clock does to a market.
+ *
+ * Real intraday markets are not stationary. Volatility and volume run in a
+ * U-shape around session opens and closes, FX activity concentrates in the
+ * London/New York overlap, and the quiet hours in between behave differently
+ * from the busy ones — ranges hold in the lull and break when a session comes
+ * online. A strategy that says "only trade at these hours" is making a claim
+ * about this structure, and without it in the simulator the claim cannot be
+ * tested either way.
+ *
+ * Each array is 24 multipliers indexed by UTC hour.
+ */
+export interface SessionProfile {
+  label: string;
+  volByHour: number[];
+  /** Scales each regime's pull toward the anchor. Above 1, ranges hold harder. */
+  reversionByHour: number[];
+  volumeByHour: number[];
+}
+
+const flat = (): number[] => new Array(24).fill(1);
+
+/** No intraday structure at all. The control. */
+export const FLAT_SESSION: SessionProfile = {
+  label: 'flat',
+  volByHour: flat(),
+  reversionByHour: flat(),
+  volumeByHour: flat(),
+};
+
+/** Build a profile from sparse {hour: multiplier} overrides. */
+function byHour(overrides: Record<number, number>): number[] {
+  const out = flat();
+  for (const [hour, value] of Object.entries(overrides))
+    out[Number(hour)] = value;
+  return out;
+}
+
+/**
+ * A 24-hour market with the usual shape: Asia quiet, London open at 07:00 UTC,
+ * New York open at 13:00, the overlap to 16:00 busiest, then a fade.
+ *
+ * Volatility and volume spike at the opens. Mean reversion is *weaker* there —
+ * that is when ranges break — and stronger in the lulls, which is the effect a
+ * session-timed reversion strategy is trying to exploit.
+ */
+export const FX_SESSIONS: SessionProfile = {
+  label: 'fx-sessions',
+  volByHour: byHour({
+    0: 0.7,
+    1: 0.6,
+    2: 0.6,
+    3: 0.55,
+    4: 0.55,
+    5: 0.6,
+    6: 0.8,
+    7: 1.6,
+    8: 1.7,
+    9: 1.4,
+    10: 1.1,
+    11: 1.0,
+    12: 1.1,
+    13: 1.9,
+    14: 1.8,
+    15: 1.5,
+    16: 1.3,
+    17: 1.0,
+    18: 0.8,
+    19: 0.7,
+    20: 0.7,
+    21: 0.8,
+    22: 0.7,
+    23: 0.7,
+  }),
+  reversionByHour: byHour({
+    0: 1.4,
+    1: 1.6,
+    2: 1.7,
+    3: 1.8,
+    4: 1.8,
+    5: 1.6,
+    6: 1.2,
+    7: 0.3,
+    8: 0.2,
+    9: 0.4,
+    10: 0.9,
+    11: 1.2,
+    12: 0.9,
+    13: 0.2,
+    14: 0.2,
+    15: 0.4,
+    16: 0.7,
+    17: 1.1,
+    18: 1.4,
+    19: 1.5,
+    20: 1.5,
+    21: 1.3,
+    22: 1.4,
+    23: 1.4,
+  }),
+  volumeByHour: byHour({
+    0: 0.6,
+    1: 0.5,
+    2: 0.4,
+    3: 0.4,
+    4: 0.4,
+    5: 0.5,
+    6: 0.7,
+    7: 1.7,
+    8: 1.9,
+    9: 1.6,
+    10: 1.2,
+    11: 1.0,
+    12: 1.1,
+    13: 2.1,
+    14: 2.0,
+    15: 1.7,
+    16: 1.4,
+    17: 1.0,
+    18: 0.7,
+    19: 0.6,
+    20: 0.6,
+    21: 0.7,
+    22: 0.6,
+    23: 0.6,
+  }),
+};
+
+/**
+ * The same U-shaped volatility and volume, but reversion is uniform across the
+ * clock. Any strategy that "finds" a session edge here has found noise.
+ */
+export const VOL_ONLY_SESSIONS: SessionProfile = {
+  label: 'vol-only-sessions',
+  volByHour: FX_SESSIONS.volByHour,
+  reversionByHour: flat(),
+  volumeByHour: FX_SESSIONS.volumeByHour,
+};
+
+/** UTC hour of the bar's close. What a session filter keys on. */
+export function hourOfDay(timestamp: number): number {
+  return new Date(timestamp).getUTCHours();
+}
+
 export interface ScenarioSpec {
   id: string;
   description: string;
@@ -39,6 +184,8 @@ export interface ScenarioSpec {
   startPrice: number;
   baseVolume: number;
   regimes: RegimeSpec[];
+  /** Intraday structure. Defaults to none, which is the honest default. */
+  session?: SessionProfile;
   /** Venue conditions specific to this scenario (wide spreads, slow venue, ...). */
   costOverrides?: Partial<CostModel>;
 }
@@ -94,9 +241,15 @@ export function generateBars(spec: ScenarioSpec, seed: number | string): Bar[] {
   let volState = 1;
   let startTime = Date.UTC(2024, 0, 1);
 
+  const session = spec.session ?? FLAT_SESSION;
+
   for (let i = 0; i < spec.bars; i++) {
     const r = schedule[i]!;
-    const sigmaBar = (r.vol / Math.sqrt(barsPerYear)) * volState;
+    // The clock modulates volatility, how hard ranges hold, and how much trades.
+    const hour = hourOfDay(startTime);
+    const sigmaBar =
+      (r.vol / Math.sqrt(barsPerYear)) * volState * session.volByHour[hour]!;
+    const reversion = r.meanReversion * session.reversionByHour[hour]!;
     const muBar = r.drift / barsPerYear;
 
     // Trend is an AR(1) process, so momentum persists instead of flickering.
@@ -108,7 +261,7 @@ export function generateBars(spec: ScenarioSpec, seed: number | string): Bar[] {
     let low = open;
 
     for (let s = 0; s < SUB_STEPS; s++) {
-      const pull = -r.meanReversion * (logPrice - anchor);
+      const pull = -reversion * (logPrice - anchor);
       const step =
         (muBar + trend + pull) / SUB_STEPS +
         (sigmaBar / Math.sqrt(SUB_STEPS)) * rng.normal();
@@ -142,6 +295,7 @@ export function generateBars(spec: ScenarioSpec, seed: number | string): Bar[] {
     const volume =
       spec.baseVolume *
       r.liquidity *
+      session.volumeByHour[hour]! *
       (0.6 + 2.5 * (move / Math.max(1e-9, sigmaBar))) *
       Math.exp(0.35 * rng.normal());
 

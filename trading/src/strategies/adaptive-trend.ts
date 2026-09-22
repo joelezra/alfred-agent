@@ -32,6 +32,17 @@ export function adaptiveTrend(params: Record<string, number> = {}): Strategy {
   const riskFraction = params.riskFraction ?? 0.01;
   const maxGross = params.maxGross ?? 1;
   const standDownVolRatio = params.standDownVolRatio ?? 2.5;
+  /**
+   * Volatility windows, in bars.
+   *
+   * On intraday data these must span whole days. Volatility runs on a 24-hour
+   * cycle — quiet overnight, violent at the session opens — so a ratio of two
+   * windows that are not both whole days measures the time of day as much as
+   * it measures the market, and the strategy stands down and re-enters on the
+   * clock rather than on anything real.
+   */
+  const fastVolBars = params.fastVolBars ?? 24;
+  const slowVolBars = params.slowVolBars ?? 120;
 
   return {
     id: 'adaptive-trend',
@@ -42,8 +53,8 @@ export function adaptiveTrend(params: Record<string, number> = {}): Strategy {
       if (closes.length < slow) return;
 
       const price = view.bar().close;
-      const shortAtr = atr(view, 20);
-      const longAtr = atr(view, 100);
+      const shortAtr = atr(view, fastVolBars);
+      const longAtr = atr(view, slowVolBars);
       if (
         !Number.isFinite(shortAtr) ||
         !Number.isFinite(longAtr) ||

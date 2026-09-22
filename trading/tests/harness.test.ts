@@ -26,18 +26,16 @@ describe('the harness discriminates', () => {
     expect(failed.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('separates a considered strategy from a careless one on every cost axis', () => {
+  it('separates a considered strategy from a careless one on risk control', () => {
     expect(adaptive.blockingFailures.length).toBeLessThan(
       scalper.blockingFailures.length,
     );
-    // These are the gates that describe *why* the scalper is hopeless, and a
-    // strategy that waits for a real edge should clear all of them.
-    for (const id of [
-      'edge-vs-cost',
-      'drawdown',
-      'tail-risk',
-      'seed-stability',
-    ]) {
+    // The risk-control gates are the ones that hold at any sample size: a
+    // strategy that sizes for risk and stands down clears them, one that does
+    // not fails all three. `edge-vs-cost` is deliberately not asserted here —
+    // it is a mean over trades, so at this reduced seed count and run length
+    // it is noisy enough to flip. The full-defaults test below covers it.
+    for (const id of ['drawdown', 'tail-risk', 'seed-stability']) {
       expect(scalper.blockingFailures.map((g) => g.id)).toContain(id);
       expect(adaptive.blockingFailures.map((g) => g.id)).not.toContain(id);
     }

@@ -8,7 +8,7 @@ Three parts:
 | Part | What it is |
 |---|---|
 | **Engine** (`src/engine`, `src/guards`) | Event-driven replay. Feeds a strategy one bar at a time and makes lookahead structurally impossible. |
-| **Scenarios** (`src/scenarios`) | Thirteen synthetic market conditions — trends, ranges, crashes, gaps, thin books, wide spreads, slow venues. |
+| **Scenarios** (`src/scenarios`) | Fifteen synthetic market conditions — trends, ranges, crashes, gaps, thin books, wide spreads, slow venues, and two with intraday session structure. |
 | **Harness** (`src/harness`) | Runs a strategy through all of them under five cost regimes and turns the result into a pass or a fail with reasons. |
 
 ```bash
@@ -17,7 +17,7 @@ npm run trading -- backtest --strategy sma-trend --scenario bull-trend
 npm run trading -- harness  --strategy naive-scalper      # the full verdict
 npm run trading -- audit    --strategy sma-trend          # lookahead check only
 npm run trading -- walkforward --strategy sma-trend
-npm run test:trading                                      # 44 tests
+npm run test:trading                                      # 72 tests
 ```
 
 `harness` exits non-zero when a blocking gate fails, so it drops straight into CI
@@ -160,11 +160,22 @@ Each exists to kill a specific kind of wishful thinking.
 | `regime-flip` | Parameters fitted to one regime; no way to stand down. |
 | `quiet-drift` | Trading on a schedule rather than on an edge. |
 | `news-shock` | Holding through events without sizing for the tail. |
+| `session-reversion` | Reversion strategies that trade 02:00 the same way as 08:00, and session filters fitted to nothing. |
+| `session-flat` | Session filters that are really curve fits — the same volatility shape, but no time-of-day edge to find. |
 
 Prices come from an intrabar random walk with mean reversion, a persistent AR(1)
 trend, clustered volatility and jumps. OHLC is read off that path rather than
 invented, so wicks, gaps and stop-outs behave the way they do on a chart. Same
 seed, same bars, always.
+
+Two scenarios carry a **session profile** (`SessionProfile`): per-UTC-hour
+multipliers on volatility, volume and how hard ranges hold. `FX_SESSIONS` has the
+usual shape — Asia quiet, London open at 07:00, New York at 13:00, the overlap
+busiest — with reversion *weakest* at the opens, when ranges break. Without this
+in the simulator, a strategy that says "only trade these hours" cannot be tested
+either way. `session-flat` is its control: identical volatility and volume shape,
+but reversion uniform across the clock, so any time-of-day edge found there is
+noise by construction.
 
 Default timeframe is **hourly bars over twelve weeks** — long enough in market
 time that a real edge can clear a round trip. Run the same catalogue anywhere
@@ -216,6 +227,10 @@ Three ship, and what they do is the point:
 - **`sma-trend`** — plain crossover with an ATR stop. Fails on tail risk and
   drawdown. A useful control: a new strategy that cannot beat this is not worth
   the risk of running.
+- **`bb-rsi-reversion`** — Bollinger band touch plus RSI, at a confirmed swing,
+  filtered for regime and session. Fails four blocking gates. See
+  [`docs/bb-rsi-findings.md`](docs/bb-rsi-findings.md) for what the harness
+  found and why it matters more than the verdict.
 - **`adaptive-trend`** — will not open unless the expected move is several times
   the round trip, sizes by risk rather than capital, stands down when volatility
   dislocates. Clears all ten blocking gates. It still trips two advisory ones:
@@ -294,8 +309,8 @@ trading/
   src/market/                 spread, impact, latency, volatility tracking
   src/engine/                 broker, portfolio, replay loop
   src/metrics/                performance stats, deflated Sharpe
-  src/scenarios/              generator + the thirteen conditions
+  src/scenarios/              generator, session profiles, the fifteen conditions
   src/harness/                suite, gates, cost floor, walk-forward, report
   src/strategies/             references, oracle, registry
-  tests/                      44 tests, including the calibration ones
+  tests/                      72 tests, including the calibration ones
 ```

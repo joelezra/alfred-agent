@@ -1,4 +1,9 @@
-import { regime, type ScenarioSpec } from './generator.js';
+import {
+  FX_SESSIONS,
+  VOL_ONLY_SESSIONS,
+  regime,
+  type ScenarioSpec,
+} from './generator.js';
 
 export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;
@@ -211,6 +216,44 @@ export const SCENARIOS: ScenarioSpec[] = [
       'Very low volatility. Almost nothing happens, and costs still accrue.',
     breaks: 'Strategies that trade on a schedule rather than on an edge.',
     regimes: [regime({ label: 'quiet', vol: 0.12, momentum: 0.9 })],
+  }),
+  base({
+    id: 'session-reversion',
+    description:
+      'A 24-hour market with real intraday structure: quiet Asian hours where ranges hold, violent London and New York opens where they break.',
+    breaks:
+      'Reversion strategies that trade the same way at 08:00 as at 02:00, and session filters that turn out to be fitted to nothing.',
+    session: FX_SESSIONS,
+    // An ordinary market. The intraday variation comes from the session
+    // profile, not from the base regime — otherwise these two scenarios would
+    // tilt the whole catalogue toward reversion strategies and quietly
+    // penalise every trend follower measured against it.
+    regimes: [
+      regime({
+        label: 'mixed',
+        drift: 0.3,
+        vol: 0.5,
+        meanReversion: 0.02,
+        momentum: 0.85,
+      }),
+    ],
+  }),
+  base({
+    id: 'session-flat',
+    description:
+      'The same U-shaped volatility and volume through the day, but ranges hold equally well at every hour.',
+    breaks:
+      'Session filters that are really curve fits. There is no time-of-day edge here, so finding one means finding noise.',
+    session: VOL_ONLY_SESSIONS,
+    regimes: [
+      regime({
+        label: 'mixed',
+        drift: 0.3,
+        vol: 0.5,
+        meanReversion: 0.02,
+        momentum: 0.85,
+      }),
+    ],
   }),
   base({
     id: 'news-shock',

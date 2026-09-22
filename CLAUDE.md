@@ -20,6 +20,7 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 | `src/db.ts` | SQLite operations |
 | `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
 | `container/skills/` | Skills loaded inside agent containers (browser, status, formatting) |
+| `trading/` | Strategy backtest harness — event-driven replay, market scenarios, pass/fail gates ([README](trading/README.md)) |
 
 ## Secrets / Credentials / Proxy (OneCLI)
 
@@ -55,6 +56,14 @@ Run commands directly—don't tell the user to run them.
 npm run dev          # Run with hot reload
 npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
+```
+
+Trading centre (self-contained, not part of the main build):
+
+```bash
+npm run trading -- harness --strategy <name>   # grade a strategy, exit 1 on failure
+npm run trading -- scenarios                   # list the market conditions
+npm run test:trading                           # harness tests
 ```
 
 Service management:

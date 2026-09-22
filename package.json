@@ -15,10 +15,13 @@
     "prepare": "husky",
     "setup": "tsx setup/index.ts",
     "auth": "tsx src/whatsapp-auth.ts",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "lint": "eslint src/ trading/",
+    "lint:fix": "eslint src/ trading/ --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "trading": "tsx trading/cli.ts",
+    "test:trading": "vitest run --config vitest.trading.config.ts",
+    "typecheck:trading": "tsc --noEmit -p trading/tsconfig.json"
   },
   "dependencies": {
     "@onecli-sh/sdk": "^0.2.0",

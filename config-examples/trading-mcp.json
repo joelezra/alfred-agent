@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy the mcpServers entries you want into .mcp.json at the repo root. TradingView needs an Essential-tier account or higher and authenticates over OAuth in the browser on first use - no API key goes in this file. See trading/mcp/README.md before adding an execution server.",
+  "mcpServers": {
+    "tradingview": {
+      "type": "http",
+      "url": "https://mcp.tradingview.com/mcp"
+    }
+  }
+}

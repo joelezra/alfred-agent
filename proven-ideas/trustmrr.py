@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch TrustMRR's public discovery feed and filter it into idea-scout winners.
+"""Fetch TrustMRR's public discovery feed and filter it into proven-ideas winners.
 
 Revenue on TrustMRR is read straight from the payment provider (Stripe, Paddle,
 Lemon Squeezy, ...), so these are checked numbers, not self-reported claims.
@@ -16,7 +16,7 @@ import urllib.request
 
 DISCOVERY = "https://trustmrr.com/api/ai/discovery"
 STARTUP_MD = "https://trustmrr.com/startup/{slug}.md"
-UA = {"User-Agent": "alfred-idea-scout/1.0"}
+UA = {"User-Agent": "proven-ideas/1.0"}
 
 
 def get(url: str) -> bytes:

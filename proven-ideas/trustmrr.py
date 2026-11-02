@@ -7,6 +7,12 @@ Lemon Squeezy, ...), so these are checked numbers, not self-reported claims.
 Usage:
   trustmrr.py winners [--min 1000] [--max 20000] [--seen FILE] [--json]
   trustmrr.py startup <slug>          # print the startup's .md profile
+  trustmrr.py growth3m [--min-month 1000] [--pool 150] [--json]
+      Fastest growers over the last 3 full months. TrustMRR has no public
+      3-month ranking, so this builds a pool (fastest-growing + recently added
+      + their "Discover more" recommendations), reads each public .md page's
+      monthly revenue timeline, and compares the latest full month with the
+      month 3 months earlier. The pool is a sample, not all 15k startups.
 """
 import argparse
 import json
@@ -77,6 +83,83 @@ def cmd_winners(a) -> None:
         print("No startups in the revenue range today.")
 
 
+def month_add(ym: str, n: int) -> str:
+    y, m = map(int, ym.split("-"))
+    m += n
+    y += (m - 1) // 12
+    m = (m - 1) % 12 + 1
+    return f"{y:04d}-{m:02d}"
+
+
+def parse_md(md: str) -> dict:
+    months = {}
+    sec = md.split("### Monthly revenue timeline", 1)
+    if len(sec) == 2:
+        for ym, val in re.findall(r"^\| (\d{4}-\d{2}) \| \$([\d,.]+) \|", sec[1].split("\n## ", 1)[0], re.M):
+            months[ym] = float(val.replace(",", ""))
+    desc = re.search(r"^- Description: (.*)$", md, re.M)
+    name = re.search(r"^- Name: (.*)$", md, re.M)
+    prov = re.search(r"^- Verified payment provider API source: (.*)$", md, re.M)
+    related = re.findall(r'"slug": "([a-z0-9-]+)"', md.split("## Discover More Startups", 1)[-1])
+    return {"months": months, "description": desc.group(1).strip() if desc else "",
+            "name": name.group(1).strip() if name else "",
+            "provider": prov.group(1).strip() if prov else "", "related": related}
+
+
+def cmd_growth3m(a) -> None:
+    import datetime
+    import time
+    data = json.loads(get(DISCOVERY))
+    seeds = data.get("fastestGrowingStartups", []) + data.get("recentlyAddedStartups", [])
+    queue = [s["slug"] for s in seeds if not s.get("stealthMode")]
+    seen: set[str] = set()
+    pages = {}
+    while queue and len(pages) < a.pool:
+        slug = queue.pop(0)
+        if slug in seen:
+            continue
+        seen.add(slug)
+        try:
+            info = parse_md(get(STARTUP_MD.format(slug=slug)).decode("utf-8", "replace"))
+        except Exception:
+            continue
+        pages[slug] = info
+        queue.extend(r for r in info["related"] if r not in seen)
+        time.sleep(0.3)
+    today = datetime.date.today()
+    last = month_add(f"{today.year:04d}-{today.month:02d}", -1)  # last full month
+    base = month_add(last, -3)
+    rows = []
+    for slug, info in pages.items():
+        if info["name"].lower().startswith(("stealth company", "anonymous")):
+            continue
+        m = info["months"]
+        end = m.get(last, 0.0)
+        start = m.get(base, 0.0)
+        if end < a.min_month:
+            continue
+        rows.append({
+            "name": info["name"], "slug": slug, "url": f"https://trustmrr.com/startup/{slug}",
+            "description": info["description"], "provider": info["provider"],
+            "base_month": base, "base_revenue": round(start),
+            "last_month": last, "last_revenue": round(end),
+            "gain": round(end - start),
+            "growth_pct": None if start <= 0 else round((end - start) / start * 100),
+            "trail": [round(m.get(month_add(base, i), 0)) for i in range(4)],
+        })
+    rows.sort(key=lambda r: -r["gain"])
+    if a.json:
+        json.dump(rows, sys.stdout, indent=1)
+        print()
+        return
+    print(f"Pool: {len(pages)} startups read. Comparing {base} -> {last}.")
+    for r in rows[:a.top]:
+        g = "new" if r["growth_pct"] is None else f"+{r['growth_pct']}%" if r["growth_pct"] >= 0 else f"{r['growth_pct']}%"
+        trail = " -> ".join(f"${v:,}" for v in r["trail"])
+        print(f"{r['name']} (`{r['slug']}`): {trail}  [{g}, +${r['gain']:,}/mo]")
+        print(f"   {r['description'][:150]}")
+
+
 def cmd_startup(a) -> None:
     sys.stdout.write(get(STARTUP_MD.format(slug=a.slug)).decode("utf-8", "replace"))
 
@@ -93,6 +176,12 @@ def main() -> None:
     s = sub.add_parser("startup")
     s.add_argument("slug")
     s.set_defaults(fn=cmd_startup)
+    g = sub.add_parser("growth3m")
+    g.add_argument("--min-month", type=float, default=1000, help="min revenue in the latest full month")
+    g.add_argument("--pool", type=int, default=150, help="max startup pages to read")
+    g.add_argument("--top", type=int, default=20)
+    g.add_argument("--json", action="store_true")
+    g.set_defaults(fn=cmd_growth3m)
     a = p.parse_args()
     a.fn(a)
 
